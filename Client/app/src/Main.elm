@@ -29,7 +29,13 @@ import Json.Decode as Decode exposing (field, int, list, map8, string)
 type alias Model =
     { spells : List Spell
     , findSpell : String
+    , selectedSpell : SelectedSpell
     }
+
+
+type SelectedSpell
+    = ASpell Spell
+    | NoSpell
 
 
 type alias Spell =
@@ -48,6 +54,7 @@ init : ( Model, Cmd Msg )
 init =
     ( { spells = []
       , findSpell = ""
+      , selectedSpell = NoSpell
       }
     , Cmd.none
     )
@@ -61,10 +68,11 @@ type Msg
     = GetSpells
     | GotSpells (Result Http.Error (List Spell))
     | FilterSpells String
+    | SpellSelected SelectedSpell
 
 
-spellDecoder : Decode.Decoder (List Spell)
-spellDecoder =
+spellsDecoder : Decode.Decoder (List Spell)
+spellsDecoder =
     field "spells"
         (list
             (map8 Spell
@@ -84,7 +92,7 @@ getSpells : Cmd Msg
 getSpells =
     Http.get
         { url = "https://localhost:5001/api/spells"
-        , expect = Http.expectJson GotSpells spellDecoder
+        , expect = Http.expectJson GotSpells spellsDecoder
         }
 
 
@@ -100,6 +108,11 @@ update msg model =
     case msg of
         FilterSpells filter ->
             ( updateSearchText filter model
+            , Cmd.none
+            )
+
+        SpellSelected spell ->
+            ( { model | selectedSpell = spell }
             , Cmd.none
             )
 
@@ -139,28 +152,36 @@ update msg model =
 view : Model -> Html Msg
 view model =
     layout []
-        (column
-            [ centerX
-            , Element.spacing 10
-            ]
-            (spellsButton
-                :: spellsFilter model
-                :: spellsView model
-            )
+        (spellSearchView
+            model
+        )
+
+
+spellSearchView : Model -> Element Msg
+spellSearchView model =
+    column
+        [ Element.spacing 10
+        , centerX
+        ]
+        (spellsButton
+            :: spellsFilter model
+            :: spellsView model
         )
 
 
 spellsFilter : Model -> Element Msg
 spellsFilter model =
-    if List.length model.spells > 0 then 
-     Input.text []
-        { label = Input.labelHidden ""
-        , onChange = FilterSpells
-        , text = model.findSpell
-        , placeholder = Just (Input.placeholder [] (Element.text "search"))
-        }
+    if List.length model.spells > 0 then
+        Input.text []
+            { label = Input.labelHidden ""
+            , onChange = FilterSpells
+            , text = model.findSpell
+            , placeholder = Just (Input.placeholder [] (Element.text "search"))
+            }
+
     else
         Element.none
+
 
 spellsButton : Element Msg
 spellsButton =
@@ -183,12 +204,34 @@ spellsView model =
             (\spell ->
                 String.contains model.findSpell spell.name
             )
-        |> List.map spellView
+        |> List.map (spellView model)
 
 
-spellView : Spell -> Element Msg
-spellView spell =
-    el [ centerX ] (text spell.name)
+spellView : Model -> Spell -> Element Msg
+spellView model spell =
+    let
+        spellAttributes =
+            case model.selectedSpell of
+                ASpell selectedSpell ->
+                    if spell.name == selectedSpell.name then
+                        [ Element.Background.color (rgb255 0 255 0)
+                        ]
+
+                    else
+                        []
+
+                NoSpell ->
+                    []
+    in
+    el
+        (List.concat
+            [ [ centerX
+              , onClick (SpellSelected (ASpell spell))
+              ]
+            , spellAttributes
+            ]
+        )
+        (text spell.name)
 
 
 
